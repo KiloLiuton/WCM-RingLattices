@@ -8,36 +8,9 @@
 #include <memory>
 #include <string>
 #include <fstream>
+#include <functional>
 #include "dynamics.hpp"
-
-template<typename ... Args>
-std::string string_format( const std::string& format, Args ... args )
-{
-    /*Format a string with C-like syntax*/
-    size_t size = snprintf( nullptr, 0, format.c_str(), args ... ) + 1; // Extra space for '\0'
-    if( size <= 0 ){ throw std::runtime_error( "Error during formatting." ); }
-    std::unique_ptr<char[]> buf( new char[ size ] );
-    snprintf( buf.get(), size, format.c_str(), args ... );
-    return std::string( buf.get(), buf.get() + size - 1 ); // We don't want the '\0' inside
-}
-
-std::string defaultFileName(int N, int K, double a, int log_phases)
-{
-    int v = 0;
-    const char* prefix = (log_phases > 0) ? "phasetrial" : "trial";
-    std::string fname = string_format(
-            "%s-N-%06dK-%05da-%.6f_v%d.dat",
-            prefix, N, K, a, v
-            );
-    while (std::ifstream(fname)) {
-        v++;
-        fname = string_format(
-                "%s-N-%06dK-%05da-%.6f_v%d.dat",
-                prefix, N, K, a, v
-                );
-    }
-    return fname;
-}
+#include "logging.hpp"
 
 pcg32 medianRNG;
 int median(int n0, int n1, int n2)
@@ -89,10 +62,12 @@ int main(int argc, char *argv[])
 {
     int optN = 1000;
     int optK = 300;
+    double opta = 1.6;
+    double gmean = 1.0;
+    double gstddev = 0.1;
     int iters = 50000;
     int seed = 23;
     int stream = 42;
-    double opta = 1.6;
     int log_phases = 0;
     int log_both = 0;
     int log_interval = 0;
@@ -106,6 +81,8 @@ int main(int argc, char *argv[])
         {"size",          required_argument, 0, 'n'},
         {"range",         required_argument, 0, 'k'},
         {"coupling",      required_argument, 0, 'a'},
+        {"gmean",         required_argument, 0, '4'},
+        {"gstddev",       required_argument, 0, '5'},
         {"iters",         required_argument, 0, 'i'},
         {"log-phases",    required_argument, 0,  1 },
         {"log-both",      required_argument, 0,  2 },
@@ -144,6 +121,12 @@ int main(int argc, char *argv[])
         case 3:
             log_interval = abs(atoi(optarg));
             break;
+        case 4:
+            gmean = atof(optarg);
+            break;
+        case 5:
+            gstddev = atof(optarg);
+            break;
         case 'i':
             iters = atoi(optarg);
             break;
@@ -161,7 +144,6 @@ int main(int argc, char *argv[])
             break;
         }
     }
-
     if (optK > MAXK) {
         printf("-k --range option cannot exceed %d\n", MAXK);
         exit(EXIT_FAILURE);
@@ -174,7 +156,10 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
     if (filename.empty()) {
-        filename = defaultFileName(optN, optK, opta, log_phases);
+        const char* prefix = log_phases ? "phasetrial" : "trial";
+        char suffix[16];
+        sprintf(suffix, "a-%.6f", opta);
+        filename = defaultFilePath(optN, optK, prefix, suffix);
     }
     std::ostringstream metadata;
     metadata << "N=" << optN << " K=" << optK << " a=" << opta
@@ -184,20 +169,42 @@ int main(int argc, char *argv[])
 
     // Initialize system with command line options
     struct trial trial;
-    if (IC == "uniform")
-        initUniform(trial, optN, optK, opta, seed, stream);
-    else if (IC == "wave")
-        initWave(trial, optN, optK, opta, seed, stream, 6);
+    pcg32 RNG(seed, stream);
+    std::function<void(struct trial &)> initStates = NULL;
+    std::function<void(struct trial &)> initNaturalFreqs = NULL;
+    if (IC == "uniform") {
+        initStates = [](struct trial &t){
+            initUniform(t, 0);
+        };
+    } else if (IC.substr(0, 4) == "wave") {
+        int num_waves = stoi(IC.substr(4));
+        initStates = [num_waves](struct trial &t){
+            initWave(t, num_waves, false);
+        };
+    } else {
+        std::cout << "Initial configuration " << IC << " not understood!\n"
+            << "Try one of:\n"
+            << "uniform\n"
+            << "wave[n] - where n is the number of waves\n";
+        exit(EXIT_FAILURE);
+    }
+
+    initNaturalFreqs = [gmean, gstddev](struct trial &t) {
+        initGaussianNaturalFreqs(t, gmean, gstddev);
+    };
+    initTrial(trial, optN, optK, opta, RNG, initStates, initNaturalFreqs);
 
     printf("Memory usage: %.2f MB\n", sizeof(trial)/1e3);
     printf("Initializing with:\n"
            "%s"
            "log-phases %d\n"
            "log-interval %d\n"
+           "log-both %d\n"
            "ic %s\n",
            metadata.str().c_str(),
            log_phases,
            log_interval,
+           log_both,
            IC.c_str()
            );
 
@@ -207,12 +214,14 @@ int main(int argc, char *argv[])
     int interval=1;
     struct timespec start, finish;
     if (log_both > 0) {
-        std::string fn1 = defaultFileName(optN, optK, opta, 0);
+        char suffix[16];
+        sprintf(suffix, "a-%.6f", opta);
+        std::string fn1 = defaultFilePath(optN, optK, "trial", suffix);
         FILE *file1 = fopen(fn1.c_str(), "w");
         fprintf(file1, "%s", metadata.str().c_str());
         fprintf(file1, "r,psi,N0,N1,N2,t\n");
 
-        std::string fn2 = defaultFileName(optN, optK, opta, 1);
+        std::string fn2 = defaultFilePath(optN, optK, "phasetrial", suffix);
         FILE *file2 = fopen(fn2.c_str(), "w");
         fprintf(file2, "%s", metadata.str().c_str());
         fprintf(file2, "phases\n");
@@ -258,6 +267,7 @@ int main(int argc, char *argv[])
         clock_gettime(CLOCK_MONOTONIC, &finish);
 
         fclose(file);
+        std::cout << "Written to\n" << filename << "\n";
     } else {
         FILE *file = fopen(filename.c_str(), "w");
         fprintf(file, "%s", metadata.str().c_str());
@@ -280,6 +290,7 @@ int main(int argc, char *argv[])
         clock_gettime(CLOCK_MONOTONIC, &finish);
 
         fclose(file);
+        std::cout << "Written to\n" << filename << "\n";
     }
 
     if (trial.N<50) {
@@ -296,7 +307,7 @@ int main(int argc, char *argv[])
 
     double runtime = finish.tv_sec - start.tv_sec;
     runtime += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    std::cout << "Run time: " << runtime << " s\n";
+    std::cout << "Run time: " << runtime << " s\n\n";
 
     return 0;
 }
