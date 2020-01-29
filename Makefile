@@ -1,5 +1,5 @@
 TARGETS = trial chi test
-TGTS = $(patsubst %, %$(TARGETS), {sim_, sim_, sim_})
+TGTS = $(patsubst %, sim_%, $(TARGETS))
 
 all: $(TARGETS)
 
