@@ -9,8 +9,11 @@
 #include <random>
 #include <functional>
 #include "pcg_random.hpp"
+
+#ifndef MAXN
 #define MAXN 25001
-#define MAXK 12500
+#endif
+#define MAXK MAXN/2 - (1 - MAXN % 2)
 #define MAX_TABLE_SIZE 4*MAXK+1
 #define SIN_PHI1 0.8660254037844387
 
