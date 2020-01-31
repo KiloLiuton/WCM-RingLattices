@@ -10,12 +10,13 @@ int main(int argc, char *argv[])
 {
     int optN = 1000;
     int optK = 200;
-    int num_trials = 50;
-    int iters = 50000;
-    int burn = 50000;
     double a = 1.0;
     double A = 4.0;
     int na = 20;
+    int maxthrds = 8;
+    int num_trials = 50;
+    int iters = 50000;
+    int burn = 50000;
     int seed = 23;
     int log_interval = 5;
     std::string filename = "";
@@ -27,11 +28,13 @@ int main(int argc, char *argv[])
     static struct option longopt[] = {
         {"size",          required_argument, 0, 'n'},
         {"range",         required_argument, 0, 'k'},
+        {"amin",          required_argument, 0, 'a'},
+        {"amax",          required_argument, 0, 'A'},
+        {"na",            required_argument, 0, '3'},
+        {"maxthrds",      required_argument, 0, '4'},
         {"trials",        required_argument, 0, 't'},
         {"iters",         required_argument, 0, 'i'},
         {"burn",          required_argument, 0, 'b'},
-        {"amin",          required_argument, 0, 'a'},
-        {"amax",          required_argument, 0, 'A'},
         {"log-interval",  required_argument, 0,  1 },
         {"random-seed",   required_argument, 0,  2 },
         {"outfile",       required_argument, 0, 'o'},
@@ -75,6 +78,12 @@ int main(int argc, char *argv[])
         case 2:
             seed = atoi(optarg);
             break;
+        case 3:
+            na = atoi(optarg);
+            break;
+        case 4:
+            maxthrds = atoi(optarg);
+            break;
         case 'o':
             filename = std::string(optarg);
             break;
@@ -98,15 +107,12 @@ int main(int argc, char *argv[])
         const char* prefix = "chicurve";
         filename = defaultFilePath(optN, optK, prefix, "");
     }
+
     std::ostringstream metadata;
     metadata << "N=" << optN << " K=" << optK
              << " ic=" << IC.c_str() << " log-interval=" << log_interval
              << " iters=" << iters << " burn=" << burn
              << " seed=" << seed << "\n";
-
-    struct trial trials[4];
-    omp_set_num_threads(4);
-    printf("Memory usage: %.2f MB\n", sizeof(trials)/1e3);
     printf("Initializing with:\n"
            "%s"
            "log-interval %d\n"
@@ -115,35 +121,44 @@ int main(int argc, char *argv[])
            log_interval,
            IC.c_str()
            );
+    omp_set_num_threads(maxthrds);
 
     std::vector<double> couplings;
     for (int i=0; i<na; i++) couplings.push_back(a+i*(A-a)/(na-1));
-
     double trial_avg_r   = 0;
     double trial_avg_psi = 0;
     for (auto a: couplings) {
-#pragma omp parallel for default(none) shared(optN,optK,a,iters,burn,IC,seed,trials,num_trials) reduction(+:trial_avg_r,trial_avg_psi)
-        for (int i=0; i<4; i++) {
-            // TODO: run the appropriate amount of trials instead of just NUM_THRDS
-            std::function<void(struct trial &)> initStates = NULL;
-            std::function<void(struct trial &)> initNaturalFreqs = NULL;
-            if (IC == "uniform") {
-                initStates = [](struct trial &t){ initUniform(t, 0); };
-            } else if (IC.substr(0, 4) == "wave") {
-                int num_waves = stoi(IC.substr(4));
-                initStates = [num_waves](struct trial &t){ initWave(t, num_waves, false); };
+        #pragma omp parallel default(none) shared(std::cout,optN,optK,a,iters,burn,IC,seed,num_trials) reduction(+:trial_avg_r,trial_avg_psi)
+        {
+            #pragma omp single nowait
+            {
+                int nthrds = omp_get_num_threads();
+                printf("Memory usage: %.2f MB\n", nthrds*sizeof(struct trial)/1e3);
             }
-            pcg32 RNG(seed, i);
-            initTrial(trials[i], optN, optK, a, RNG, initStates, initNaturalFreqs);
-            double r = 0, psi = 0;
-            for (int j=0; j<burn; j++) update(trials[i]);
-            for (int j=0; j<iters; j++) {
-                r   += kuramotoOP(trials[i]) / trials[i].rates_sum;
-                psi += psiOP(trials[i])      / trials[i].rates_sum;
-                update(trials[i]);
+            #pragma omp for
+            for (int i=0; i<num_trials; i++) {
+                std::cout << "Hi, thrd " << omp_get_thread_num() << std::endl;
+                struct trial trial;
+                std::function<void(struct trial &)> initStates = NULL;
+                std::function<void(struct trial &)> initNaturalFreqs = NULL;
+                if (IC == "uniform") {
+                    initStates = [](struct trial &t){ initUniform(t, 0); };
+                } else if (IC.substr(0, 4) == "wave") {
+                    int num_waves = stoi(IC.substr(4));
+                    initStates = [num_waves](struct trial &t){ initWave(t, num_waves, false); };
+                }
+                pcg32 RNG(seed, i);
+                initTrial(trial, optN, optK, a, RNG, initStates, initNaturalFreqs);
+                double r = 0, psi = 0;
+                for (int j=0; j<burn; j++) update(trial);
+                for (int j=0; j<iters; j++) {
+                    r   += kuramotoOP(trial) / trial.rates_sum;
+                    psi += psiOP(trial)      / trial.rates_sum;
+                    update(trial);
+                }
+                trial_avg_r += r;
+                trial_avg_psi += psi;
             }
-            trial_avg_r += r;
-            trial_avg_psi += psi;
         }
     }
 
