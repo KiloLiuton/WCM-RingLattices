@@ -53,12 +53,12 @@ struct trialData accumulateTrial(struct trial &trial, int iters, int burn, int l
 
 int main(int argc, char *argv[])
 {
-    int optN = 500;
-    int optK = 50;
+    int optN = 800;
+    int optK = 330;
     double a = 1.0;
-    double A = 4.0;
-    int na = 20;
-    int maxthrds = 6;
+    double A = 3.6;
+    int na = 30;
+    int maxthrds = 10;
     int num_trials = 100;
     int iters = 50000;
     int burn = 30000;
@@ -170,15 +170,18 @@ int main(int argc, char *argv[])
 
     FILE *file = fopen(filename.c_str(), "w");
     fprintf(file, "%s", metadata.str().c_str());
-    fprintf(file, "a,r,psi\n");
+    fprintf(file, "a,r,psi,chir,chipsi,duration\n");
     for (int i=0; i<na; i++) {
         double coupl = (na > 1) ? a + (A-a)*i/(na-1) : a;
         printf("[%02d/%02d] Running a=%.4f",i+1, na, coupl);
-        double trial_avg_r   = 0;
-        double trial_avg_psi = 0;
+        double trial_avg_r    = 0;
+        double trial_avg_r2   = 0;
+        double trial_avg_psi  = 0;
+        double trial_avg_psi2 = 0;
+        double trial_avg_duration   = 0;
 #pragma omp parallel num_threads(maxthrds) default(none) \
         shared(optN,optK,coupl,iters,burn,IC,seed,num_trials,log_interval) \
-        reduction(+:trial_avg_r,trial_avg_psi)
+        reduction(+:trial_avg_r,trial_avg_psi,trial_avg_r2,trial_avg_psi2,trial_avg_duration)
         {
 #pragma omp single
             {
@@ -208,13 +211,25 @@ int main(int argc, char *argv[])
 
                 initTrial(trial, optN, optK, coupl, RNG, initStates, initNaturalFreqs);
                 tdata = accumulateTrial(trial, iters, burn, log_interval);
-                trial_avg_r   += tdata.r;
-                trial_avg_psi += tdata.psi;
+                trial_avg_r        += tdata.r;
+                trial_avg_r2       += tdata.r*tdata.r;
+                trial_avg_psi      += tdata.psi;
+                trial_avg_psi2     += tdata.psi*tdata.psi;
+                trial_avg_duration += tdata.duration;
             }
         }
-        trial_avg_r   /= num_trials;
-        trial_avg_psi /= num_trials;
-        fprintf(file, "%f,%f,%f\n", coupl, trial_avg_r, trial_avg_psi);
+        trial_avg_r        /= num_trials;
+        trial_avg_r2       /= num_trials;
+        trial_avg_psi      /= num_trials;
+        trial_avg_psi2     /= num_trials;
+        trial_avg_duration /= num_trials;
+        double chir = optN * (trial_avg_r2 - trial_avg_r*trial_avg_r);
+        double chipsi = optN * (trial_avg_psi2 - trial_avg_psi*trial_avg_psi);
+        fprintf(
+                file,
+                "%f,%f,%f,%f,%f,%f\n",
+                coupl, trial_avg_r, trial_avg_psi, chir, chipsi, trial_avg_duration
+                );
         printf(" Done!  <r> = %.4f, <psi> = %.4f\n", trial_avg_r, trial_avg_psi);
     }
     printf("Done, %s\n", filename.c_str());
