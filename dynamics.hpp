@@ -21,7 +21,7 @@ struct trial {
     int N, N0, N1, N2;
     int K;
     double a;
-    double t;
+    double t, dt;
     pcg32 rng;
     double rates_sum;
     std::uniform_real_distribution<double> uniform{0.0, 1.0};
@@ -160,6 +160,7 @@ void initTrial(
     trial.K = range;
     trial.a = coupling,
     trial.t = 0;
+    trial.dt = 0;
     trial.rng = RNG;
     initTable(trial);
     initStates(trial);
@@ -186,9 +187,10 @@ inline int sampleRate(struct trial &trial)
     return index;
 }
 
-inline void updateSite(struct trial &trial, int i)
+inline double updateSite(struct trial &trial, int i)
 {
-    trial.t += 1./trial.rates_sum;
+    double dt = 1./trial.rates_sum;
+    trial.t += dt;
     uint8_t prev_state = trial.states[i];
     switch (prev_state) {
         case 0:
@@ -233,12 +235,14 @@ inline void updateSite(struct trial &trial, int i)
     double newrate = trial.nat_freqs[i] * getRate(trial.deltas[i], trial);
     trial.rates_sum += newrate - trial.rates[i];
     trial.rates[i] = newrate;
+
+    return dt;
 }
 
 inline int update(struct trial &trial)
 {
     int index = sampleRate(trial);
-    updateSite(trial, index);
+    trial.dt = updateSite(trial, index);
     return index;
 }
 

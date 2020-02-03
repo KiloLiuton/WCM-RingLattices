@@ -12,7 +12,7 @@ chi: chicurve.cpp dynamics.hpp logging.hpp
 	g++ chicurve.cpp -o sim_chi -Wall -Ipcg_random -lm -fopenmp -O3 -march=native -DMAXN=$(MAXN)
 
 test: test.cpp dynamics.hpp logging.hpp
-	g++ test.cpp -o sim_test -Wall -Ipcg_random -lm -O3 -march=native -DMAXN=$(MAXN)
+	g++ test.cpp -o sim_test -Wall -Ipcg_random -lm -O3 -march=native -DMAXN=$(MAXN) -fopenmp
 
 clean:
 	rm -f $(TGTS)
