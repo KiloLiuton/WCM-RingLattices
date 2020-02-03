@@ -187,10 +187,8 @@ inline int sampleRate(struct trial &trial)
     return index;
 }
 
-inline double updateSite(struct trial &trial, int i)
+inline void updateSite(struct trial &trial, int i)
 {
-    double dt = 1./trial.rates_sum;
-    trial.t += dt;
     uint8_t prev_state = trial.states[i];
     switch (prev_state) {
         case 0:
@@ -235,14 +233,14 @@ inline double updateSite(struct trial &trial, int i)
     double newrate = trial.nat_freqs[i] * getRate(trial.deltas[i], trial);
     trial.rates_sum += newrate - trial.rates[i];
     trial.rates[i] = newrate;
-
-    return dt;
+    trial.dt = 1./trial.rates_sum;
+    trial.t += trial.dt;
 }
 
 inline int update(struct trial &trial)
 {
     int index = sampleRate(trial);
-    trial.dt = updateSite(trial, index);
+    updateSite(trial, index);
     return index;
 }
 
