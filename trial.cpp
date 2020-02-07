@@ -70,9 +70,9 @@ int main(int argc, char *argv[])
     int stream = 42;
     int log_phases = 0;
     int log_both = 0;
-    int log_interval = 0;
+    int log_interval = 1;
     std::string filename = "";
-    std::string IC = "uniform";
+    std::string ic = "uniform";
 
     char opt;
     int opt_idx = 0;
@@ -90,7 +90,7 @@ int main(int argc, char *argv[])
         {"random-seed",   required_argument, 0, 's'},
         {"random-stream", required_argument, 0, 'r'},
         {"outfile",       required_argument, 0, 'o'},
-        {"IC",            required_argument, 0, 'c'},
+        {"ic",            required_argument, 0, 'c'},
         {0,               0,                 0,  0 }
     };
     while ((opt=getopt_long(argc, argv, sopt.c_str(), lopt, &opt_idx)) != -1) {
@@ -120,6 +120,7 @@ int main(int argc, char *argv[])
             break;
         case 3:
             log_interval = abs(atoi(optarg));
+            if (log_interval < 1) log_interval = 1;
             break;
         case 4:
             gmean = atof(optarg);
@@ -140,7 +141,7 @@ int main(int argc, char *argv[])
             filename = std::string(optarg);
             break;
         case 'c':
-            IC = std::string(optarg);
+            ic = std::string(optarg);
             break;
         }
     }
@@ -163,7 +164,9 @@ int main(int argc, char *argv[])
     }
     std::ostringstream metadata;
     metadata << "N=" << optN << " K=" << optK << " a=" << opta
-             << " ic=" << IC.c_str() << " log-interval=" << log_interval
+             << " gmean=" << gmean << " gstddev=" << gstddev
+             << " ic=" << ic.c_str() << " log-interval=" << log_interval
+             << " log-phases=" << log_phases
              << " iters=" << iters << " seed=" << seed
              << " stream=" << stream << "\n";
 
@@ -172,17 +175,17 @@ int main(int argc, char *argv[])
     pcg32 RNG(seed, stream);
     std::function<void(struct trial &)> initStates = NULL;
     std::function<void(struct trial &)> initNaturalFreqs = NULL;
-    if (IC == "uniform") {
+    if (ic == "uniform") {
         initStates = [](struct trial &t){
             initUniform(t, 0);
         };
-    } else if (IC.substr(0, 4) == "wave") {
-        int num_waves = stoi(IC.substr(4));
+    } else if (ic.substr(0, 4) == "wave") {
+        int num_waves = stoi(ic.substr(4));
         initStates = [num_waves](struct trial &t){
             initWave(t, num_waves, false);
         };
     } else {
-        std::cout << "Initial configuration " << IC << " not understood!\n"
+        std::cout << "Initial configuration " << ic << " not understood!\n"
             << "Try one of:\n"
             << "uniform\n"
             << "wave[n] - where n is the number of waves\n";
@@ -205,13 +208,13 @@ int main(int argc, char *argv[])
            log_phases,
            log_interval,
            log_both,
-           IC.c_str()
+           ic.c_str()
            );
 
     
     std::map<int, int> hist; // count states that transitioned
 
-    int interval=1;
+    int interval = 0;
     struct timespec start, finish;
     if (log_both > 0) {
         char suffix[16];
@@ -228,8 +231,9 @@ int main(int argc, char *argv[])
 
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (int i=0; i<iters; i++) {
-            if (interval > log_interval) {
-                interval = 1;
+            interval++;
+            if (interval == log_interval) {
+                interval = 0;
                 fprintf(
                         file1,
                         "%f,%f,%d,%d,%d,%f\n",
@@ -239,10 +243,8 @@ int main(int argc, char *argv[])
                         trial.t);
                 compressAndLogPhases(file2, trial, log_both);
             }
-            interval++;
 
-            int index = update(trial); // update the dynamics
-            ++hist[index];             // log which site transitioned
+            ++hist[update(trial)];  //Update dynamics and log which site transitioned
         }
         clock_gettime(CLOCK_MONOTONIC, &finish);
 
@@ -255,14 +257,13 @@ int main(int argc, char *argv[])
         fprintf(file, "phases\n");
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (int i=0; i<iters; i++) {
-            if (interval > log_interval) {
-                interval = 1;
+            interval++;
+            if (interval == log_interval) {
+                interval = 0;
                 compressAndLogPhases(file, trial, log_phases);
             }
-            interval++;
 
-            int index = update(trial); // update the dynamics
-            ++hist[index];             // log which site transitioned
+            ++hist[update(trial)];  //Update dynamics and log which site transitioned
         }
         clock_gettime(CLOCK_MONOTONIC, &finish);
 
@@ -274,18 +275,17 @@ int main(int argc, char *argv[])
         fprintf(file, "r,psi,N0,N1,N2,t\n");
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (int i=0; i<iters; i++) {
-            if (interval > log_interval) {
-                interval = 1;
+            interval++;
+            if (interval == log_interval) {
+                interval = 0;
                 fprintf(file, "%f,%f,%d,%d,%d,%f\n",
                         kuramotoOP(trial),
                         psiOP(trial),
                         trial.N0, trial.N1, trial.N2,
                         trial.t);
             }
-            interval++;
 
-            int index = update(trial); // update the dynamics
-            ++hist[index];             // log which site transitioned
+            ++hist[update(trial)];  //Update dynamics and log which site transitioned
         }
         clock_gettime(CLOCK_MONOTONIC, &finish);
 
