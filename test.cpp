@@ -13,9 +13,8 @@ int main()
     std::cout << "sizeof(trial)[MB]=" << sizeof(trial)/1e3 << std::endl;
 
     int na = 20;
-    int trials = 100;
     omp_set_num_threads(3);
-#pragma omp parallel default(none) shared(na,trials)
+#pragma omp parallel default(none) shared(na)
     {
 #pragma omp single
         {
