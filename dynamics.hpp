@@ -16,6 +16,7 @@
 #define MAXK MAXN/2 - (1 - MAXN % 2)
 #define MAX_TABLE_SIZE 4*MAXK+1
 #define SIN_PHI1 0.8660254037844387
+#define maxEle(x) ((x[0]>x[1])&&(x[0]>x[2])) ? 0 : ((x[1]>x[0])&&(x[1]>x[2])) ? 1 : ((x[2]>x[0])&&(x[2]>x[1])) ? 2 : -1
 
 struct trial {
     int N, N0, N1, N2;
@@ -244,7 +245,8 @@ inline int update(struct trial &trial)
     return index;
 }
 
-inline double kuramotoOP(struct trial const &trial) {
+inline double kuramotoOP(struct trial const &trial)
+{
     return (double) sqrt(
             trial.N0*trial.N0
             + trial.N1*trial.N1
@@ -254,28 +256,141 @@ inline double kuramotoOP(struct trial const &trial) {
             - trial.N0*trial.N2) / trial.N;
 }
 
-inline double psiOP(struct trial const &trial) {
-    double s1 = 0, s2 = 0;
+inline void psiOPandCycles(struct trial const &trial, double result[2], int const window_size)
+{
+    double sum1 = 0, sum2 = 0;
+    uint8_t curr_state;
+    int pops[3] = {0, 0, 0};
+    int curr_window_state, prev_window_state = -1;
+    int count = 0;
+    int cycles = 0;
     for (int i = 0; i < trial.N; i++) {
-        uint8_t s = trial.states[i];
-        switch (s) {
+        curr_state = trial.states[i];
+        switch (curr_state) {
        case 0:
-            s1 += trial.rates[i];
+            sum1 += trial.rates[i];
             break;
         case 1:
-            s1 += -0.5 * trial.rates[i];
-            s2 += SIN_PHI1 * trial.rates[i];
+            sum1 += -0.5 * trial.rates[i];
+            sum2 += SIN_PHI1 * trial.rates[i];
             break;
         case 2:
-            s1 += -0.5 * trial.rates[i];
-            s2 += -SIN_PHI1 * trial.rates[i];
+            sum1 += -0.5 * trial.rates[i];
+            sum2 += -SIN_PHI1 * trial.rates[i];
             break;
         default:
-            std::cout << (int) s << " <- Unknown state in psiOP!\n";
+            std::cout << (int) curr_state << " <- Unknown state in psiOP!\n";
             break;
         }
+
+        if ( window_size > 0 ) {
+        // to get the cycles we take the median of the previous `window_size` phase values in order to avoid small fluctuations.
+        // `window_size` should be set to one sixth of the size of the minimum wave size (that is, half the size of third of a wave)
+            pops[curr_state]++;
+            count++;
+            if ( (count == window_size) || (i == (trial.N-1)) ) {
+                curr_window_state = maxEle(pops);
+                // if a window is undefined (but not the first window) repeat the state of the previous window
+                if ( curr_window_state == -1 ) {
+                    if ( prev_window_state == -1 ) curr_window_state = prev_window_state = 0;
+                    curr_window_state = prev_window_state;
+                }
+                if ( (prev_window_state != curr_window_state) ) {
+                    if ( prev_window_state==0 ) {
+                        if      ( curr_window_state==1 ) cycles++;
+                        else if ( curr_window_state==2 ) cycles--;
+                    } else if ( prev_window_state==1 ) {
+                        if      ( curr_window_state==2 ) cycles++;
+                        else if ( curr_window_state==0 ) cycles--;
+                    } else if ( prev_window_state==2 ) {
+                        if      ( curr_window_state==0 ) cycles++;
+                        else if ( curr_window_state==1 ) cycles--;
+                    }
+                }
+                prev_window_state = curr_window_state;
+                count   = 0;
+                pops[0] = 0;
+                pops[1] = 0;
+                pops[2] = 0;
+            }
+        }
     }
-    return sqrt(pow(s1, 2.0) + pow(s2, 2.0)) / trial.N;
+    result[0] = sqrt(pow(sum1, 2.0) + pow(sum2, 2.0)) / trial.N;
+    result[1] = cycles;
+}
+
+inline int cycles(struct trial const &trial, int window_size)
+{
+    int pops[3] = {0, 0, 0};
+    int curr_state;
+    int curr_window_state;
+    int prev_window_state = -1;
+    int count = 0;
+    int cycles = 0;
+    for (int i=0; i<trial.N; i++) {
+        curr_state = trial.states[i];
+        pops[curr_state]++;
+        count++;
+        if ( (count == window_size) || (i == (trial.N-1)) ) {
+            curr_window_state = maxEle(pops);
+            // if a window is undefined (but not the first window) repeat the state of the previous window
+            if ( curr_window_state == -1 ) {
+                if ( prev_window_state == -1 ) curr_window_state = prev_window_state = 0;
+                curr_window_state = prev_window_state;
+            }
+            if ( (prev_window_state != curr_window_state) ) {
+                if ( prev_window_state==0 ) {
+                    if      ( curr_window_state==1 ) cycles++;
+                    else if ( curr_window_state==2 ) cycles--;
+                } else if ( prev_window_state==1 ) {
+                    if      ( curr_window_state==2 ) cycles++;
+                    else if ( curr_window_state==0 ) cycles--;
+                } else if ( prev_window_state==2 ) {
+                    if      ( curr_window_state==0 ) cycles++;
+                    else if ( curr_window_state==1 ) cycles--;
+                }
+            }
+            prev_window_state = curr_window_state;
+            count   = 0;
+            pops[0] = 0;
+            pops[1] = 0;
+            pops[2] = 0;
+        }
+    }
+    return cycles;
+
+    //int s1, s2;
+    //int pops[3];
+    //int count = 0;
+    //int cycles = 0;
+    //for (int i=0; i<trial.N; i++) {
+    //    s1 = trial.states[i];
+    //    int j = (i < (trial.N-1)) ? i+1 : 0;
+    //    s2 = trial.states[j];
+    //    pops[s2]++;
+    //    count++;
+    //    if (count == window_size) {
+    //        s2 = maxEle(pops);
+    //        if ( s1!=s2 ) {
+    //            if        ( s1==0 ) {
+    //                if      ( s2==1 ) cycles++;
+    //                else if ( s2==2 ) cycles--;
+    //            } else if ( s1==1 ) {
+    //                if      ( s2==2 ) cycles++;
+    //                else if ( s2==0 ) cycles--;
+    //            } else if ( s1==2 ) {
+    //                if      ( s2==0 ) cycles++;
+    //                else if ( s2==1 ) cycles--;
+    //            }
+    //        }
+
+    //        count = 0;
+    //        pops[0]  = 0;
+    //        pops[1]  = 0;
+    //        pops[2]  = 0;
+    //    }
+    //}
+    //return cycles;
 }
 
 #endif

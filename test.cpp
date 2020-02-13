@@ -1,31 +1,37 @@
 #include <iostream>
 #include <omp.h>
+#include <functional>
 #include "dynamics.hpp"
+#define maxEle(x) ((x[0]>x[1])&&(x[0]>x[2])) ? 0 : ((x[1]>x[0])&&(x[1]>x[2])) ? 1 : ((x[2]>x[0])&&(x[2]>x[1])) ? 2 : -1
 
+void customInitStates(struct trial &t) {
+    initWave(t, 6, false);
+    t.states[14] = 1;
+    t.states[15] = 2;
+    t.states[16] = 0;
+}
 
 int main()
 {
     pcg32 RNG(23, 42);
     struct trial trial;
-    initTrial(trial, 10, 2, 2.0, RNG, NULL, NULL);
     std::cout << "MAXN=" << MAXN << std::endl;
     std::cout << "MAXK=" << MAXK << std::endl;
     std::cout << "sizeof(trial)[MB]=" << sizeof(trial)/1e3 << std::endl;
 
-    int na = 20;
-    omp_set_num_threads(3);
-#pragma omp parallel default(none) shared(na)
-    {
-#pragma omp single
-        {
-            printf("Number of threads: %d\n", omp_get_num_threads());
-        }
-        printf("Hi from thread %d\n", omp_get_thread_num());
-#pragma omp for
-        for (int i=0; i<na; i++) {
-            printf("  For: thread %d\n", omp_get_thread_num());
-        }
+    std::function<void(struct trial &)> initStates = NULL;
+    initStates = customInitStates;
+    int N = 91;
+    int K = 2;
+    initTrial(trial, N, K, 2.8, RNG, NULL, initStates);
+
+    for (int i=0; i<N; i++) {
+        printf("%d", trial.states[i]);
     }
+    printf("\n");
+    double m[2];
+    psiOPandCycles(trial, m, 7);
+    printf("psi=%f  cycles=%d\n", m[0], (int) m[1]);
 
     return 0;
 }

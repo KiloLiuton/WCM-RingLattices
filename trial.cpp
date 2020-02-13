@@ -54,6 +54,7 @@ void compressAndLogPhases(FILE *file, struct trial &trial, int window_size)
         for (int j=0; j<trial.N; j++) {
             fprintf(file, "%d,", trial.states[j]);
         }
+        fprintf(file, "%d,", cycles(trial, 10));
         fprintf(file, "%f\n", trial.t);
     }
 }
@@ -72,7 +73,8 @@ int main(int argc, char *argv[])
     int log_both = 0;
     int log_interval = 1;
     std::string filename = "";
-    std::string ic = "uniform";
+    std::string ic = "wave12";
+    int num_waves = 12;
 
     char opt;
     int opt_idx = 0;
@@ -179,8 +181,10 @@ int main(int argc, char *argv[])
         initStates = [](struct trial &t){
             initUniform(t, 0);
         };
+        num_waves = 0;
     } else if (ic.substr(0, 4) == "wave") {
-        int num_waves = stoi(ic.substr(4));
+        printf("\n\nINITIALIZING WAVES\n\n");
+        num_waves = stoi(ic.substr(4));
         initStates = [num_waves](struct trial &t){
             initWave(t, num_waves, false);
         };
@@ -195,7 +199,8 @@ int main(int argc, char *argv[])
     initNaturalFreqs = [gmean, gstddev](struct trial &t) {
         initGaussianNaturalFreqs(t, gmean, gstddev);
     };
-    initTrial(trial, optN, optK, opta, RNG, initStates, initNaturalFreqs);
+    initTrial(trial, optN, optK, opta, RNG, initNaturalFreqs, initStates);
+    printf("Trial initialized: %d %d %d\n", trial.N0, trial.N1, trial.N2);
 
     printf("Memory usage: %.2f MB\n", sizeof(trial)/1e3);
     printf("Initializing with:\n"
@@ -222,23 +227,27 @@ int main(int argc, char *argv[])
         std::string fn1 = defaultFilePath(optN, optK, "trial", suffix);
         FILE *file1 = fopen(fn1.c_str(), "w");
         fprintf(file1, "%s", metadata.str().c_str());
-        fprintf(file1, "r,psi,N0,N1,N2,t\n");
+        fprintf(file1, "r,psi,cycles,N0,N1,N2,t\n");
 
         std::string fn2 = defaultFilePath(optN, optK, "phasetrial", suffix);
         FILE *file2 = fopen(fn2.c_str(), "w");
         fprintf(file2, "%s", metadata.str().c_str());
-        fprintf(file2, "phases\n");
+        fprintf(file2, "phi1,...,phiN,cycles,t\n");
 
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (int i=0; i<iters; i++) {
             interval++;
             if (interval == log_interval) {
                 interval = 0;
+                double psiAndCycles[2];
+                int window_size = (num_waves > 0) ? trial.N/num_waves/2 : 0;
+                psiOPandCycles(trial, psiAndCycles, window_size);
                 fprintf(
                         file1,
-                        "%f,%f,%d,%d,%d,%f\n",
+                        "%f,%f,%d,%d,%d,%d,%f\n",
                         kuramotoOP(trial),
-                        psiOP(trial),
+                        psiAndCycles[0],
+                        (int) psiAndCycles[1],
                         trial.N0, trial.N1, trial.N2,
                         trial.t);
                 compressAndLogPhases(file2, trial, log_both);
@@ -274,13 +283,17 @@ int main(int argc, char *argv[])
         fprintf(file, "%s", metadata.str().c_str());
         fprintf(file, "r,psi,N0,N1,N2,t\n");
         clock_gettime(CLOCK_MONOTONIC, &start);
+        double psiAndCycles[2];
         for (int i=0; i<iters; i++) {
             interval++;
             if (interval == log_interval) {
                 interval = 0;
-                fprintf(file, "%f,%f,%d,%d,%d,%f\n",
+                int window_size = (num_waves > 0) ? trial.N/num_waves/2 : 0;
+                psiOPandCycles(trial, psiAndCycles, window_size);
+                fprintf(file, "%f,%f,%d,%d,%d,%d,%f\n",
                         kuramotoOP(trial),
-                        psiOP(trial),
+                        psiAndCycles[0],
+                        (int) psiAndCycles[1],
                         trial.N0, trial.N1, trial.N2,
                         trial.t);
             }
