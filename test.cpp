@@ -29,9 +29,9 @@ int main()
         printf("%d", trial.states[i]);
     }
     printf("\n");
-    double m[2];
-    psiOPandCycles(trial, m, 7);
-    printf("psi=%f  cycles=%d\n", m[0], (int) m[1]);
+    double psi = psiOP(trial);
+    int cycl = cycles(trial, 7);
+    printf("psi=%f  cycles=%d\n", psi, cycl);
 
     return 0;
 }

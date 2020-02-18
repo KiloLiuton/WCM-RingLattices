@@ -107,8 +107,8 @@ void initUniform(struct trial &trial, uint8_t phase)
 
 void initWave(struct trial &trial, int num_waves, bool reversed)
 {
-    /*Initialize the system with `num_waves` domains of constant phase*/
-    int tmp = trial.N / num_waves;
+    /*Initialize the system with `3*num_waves` domains of constant phase*/
+    int tmp = trial.N / (3 * num_waves);
     for (int i=0; i<trial.N; i++) {
         uint8_t s = (i / tmp) % 3;
         if (reversed) {
@@ -256,14 +256,10 @@ inline double kuramotoOP(struct trial const &trial)
             - trial.N0*trial.N2) / trial.N;
 }
 
-inline void psiOPandCycles(struct trial const &trial, double result[2], int const window_size)
+inline double psiOP(struct trial const &trial)
 {
     double sum1 = 0, sum2 = 0;
     uint8_t curr_state;
-    int pops[3] = {0, 0, 0};
-    int curr_window_state, prev_window_state = -1;
-    int count = 0;
-    int cycles = 0;
     for (int i = 0; i < trial.N; i++) {
         curr_state = trial.states[i];
         switch (curr_state) {
@@ -282,45 +278,15 @@ inline void psiOPandCycles(struct trial const &trial, double result[2], int cons
             std::cout << (int) curr_state << " <- Unknown state in psiOP!\n";
             break;
         }
-
-        if ( window_size > 0 ) {
-        // to get the cycles we take the median of the previous `window_size` phase values in order to avoid small fluctuations.
-        // `window_size` should be set to one sixth of the size of the minimum wave size (that is, half the size of third of a wave)
-            pops[curr_state]++;
-            count++;
-            if ( (count == window_size) || (i == (trial.N-1)) ) {
-                curr_window_state = maxEle(pops);
-                // if a window is undefined (but not the first window) repeat the state of the previous window
-                if ( curr_window_state == -1 ) {
-                    if ( prev_window_state == -1 ) curr_window_state = prev_window_state = 0;
-                    curr_window_state = prev_window_state;
-                }
-                if ( (prev_window_state != curr_window_state) ) {
-                    if ( prev_window_state==0 ) {
-                        if      ( curr_window_state==1 ) cycles++;
-                        else if ( curr_window_state==2 ) cycles--;
-                    } else if ( prev_window_state==1 ) {
-                        if      ( curr_window_state==2 ) cycles++;
-                        else if ( curr_window_state==0 ) cycles--;
-                    } else if ( prev_window_state==2 ) {
-                        if      ( curr_window_state==0 ) cycles++;
-                        else if ( curr_window_state==1 ) cycles--;
-                    }
-                }
-                prev_window_state = curr_window_state;
-                count   = 0;
-                pops[0] = 0;
-                pops[1] = 0;
-                pops[2] = 0;
-            }
-        }
     }
-    result[0] = sqrt(pow(sum1, 2.0) + pow(sum2, 2.0)) / trial.N;
-    result[1] = cycles;
+    return sqrt(pow(sum1, 2.0) + pow(sum2, 2.0)) / trial.N;
 }
 
 inline int cycles(struct trial const &trial, int window_size)
 {
+    if (window_size <= 0) {
+        return -1;
+    }
     int pops[3] = {0, 0, 0};
     int curr_state;
     int curr_window_state;
@@ -335,7 +301,7 @@ inline int cycles(struct trial const &trial, int window_size)
             curr_window_state = maxEle(pops);
             // if a window is undefined (but not the first window) repeat the state of the previous window
             if ( curr_window_state == -1 ) {
-                if ( prev_window_state == -1 ) curr_window_state = prev_window_state = 0;
+                if ( prev_window_state == -1 ) prev_window_state = 0;
                 curr_window_state = prev_window_state;
             }
             if ( (prev_window_state != curr_window_state) ) {
@@ -358,39 +324,6 @@ inline int cycles(struct trial const &trial, int window_size)
         }
     }
     return cycles;
-
-    //int s1, s2;
-    //int pops[3];
-    //int count = 0;
-    //int cycles = 0;
-    //for (int i=0; i<trial.N; i++) {
-    //    s1 = trial.states[i];
-    //    int j = (i < (trial.N-1)) ? i+1 : 0;
-    //    s2 = trial.states[j];
-    //    pops[s2]++;
-    //    count++;
-    //    if (count == window_size) {
-    //        s2 = maxEle(pops);
-    //        if ( s1!=s2 ) {
-    //            if        ( s1==0 ) {
-    //                if      ( s2==1 ) cycles++;
-    //                else if ( s2==2 ) cycles--;
-    //            } else if ( s1==1 ) {
-    //                if      ( s2==2 ) cycles++;
-    //                else if ( s2==0 ) cycles--;
-    //            } else if ( s1==2 ) {
-    //                if      ( s2==0 ) cycles++;
-    //                else if ( s2==1 ) cycles--;
-    //            }
-    //        }
-
-    //        count = 0;
-    //        pops[0]  = 0;
-    //        pops[1]  = 0;
-    //        pops[2]  = 0;
-    //    }
-    //}
-    //return cycles;
 }
 
 #endif

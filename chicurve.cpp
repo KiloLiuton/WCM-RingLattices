@@ -7,7 +7,7 @@
 #include "logging.hpp"
 
 struct trialData {
-    double r, r2, psi, psi2, cycles, duration;
+    double r, r2, psi, psi2, cycl, duration;
 };
 
 struct trialData accumulateTrial(struct trial &trial, int iters, int burn, int log_interval, int num_waves)
@@ -20,11 +20,10 @@ struct trialData accumulateTrial(struct trial &trial, int iters, int burn, int l
     double r2 = 0;
     double psi = 0;
     double psi2 = 0;
-    double cycles = 0;
+    double cycl = 0;
     double duration = 0;
     double dt = 0;
     int interval = 0;
-    double measurements[2];
     if (log_interval < 1) log_interval = 1;
     for (int i=0; i<iters; i++) {
         update(trial);
@@ -34,12 +33,11 @@ struct trialData accumulateTrial(struct trial &trial, int iters, int burn, int l
             double tmp = kuramotoOP(trial) * dt;
             r += tmp;
             r2 += tmp*tmp;
-            int window_size = (num_waves > 0) ? trial.N/num_waves/2 : 0;
-            psiOPandCycles(trial, measurements, window_size);
-            psi += measurements[0] * dt;
-            psi2 += measurements[0] * measurements[0] * dt;
-            cycles += measurements[1] * dt;
-
+            tmp = psiOP(trial);
+            psi += tmp * dt;
+            psi2 += tmp * tmp * dt;
+            int window_size = (num_waves > 0) ? trial.N/(3*num_waves)/2 : 0;
+            cycl += (double) cycles(trial, window_size) * dt;
             interval = 0;
             dt = 0;
         }
@@ -50,7 +48,7 @@ struct trialData accumulateTrial(struct trial &trial, int iters, int burn, int l
         r2 / duration,
         psi / duration,
         psi2 / duration,
-        cycles / duration,
+        cycl / duration,
         duration
     };
     return tdat;
@@ -58,8 +56,8 @@ struct trialData accumulateTrial(struct trial &trial, int iters, int burn, int l
 
 int main(int argc, char *argv[])
 {
-    int optN = 800;
-    int optK = 330;
+    int optN = 200;
+    int optK = 99;
     double a = 1.0;
     double A = 3.6;
     int na = 30;
@@ -67,13 +65,13 @@ int main(int argc, char *argv[])
     double gstddev = 0.1;
     int maxthrds = 10;
     int num_trials = 100;
-    int iters = 30000;
-    int burn = 10000;
+    int iters = 9000;
+    int burn = 2000;
     int seed = 23;
     int log_interval = 1;
     std::string filename = "";
-    std::string ic = "wave12";
-    int num_waves = 12;
+    std::string ic = "wave2";
+    int num_waves = 2;
 
     char opt;
     int opt_idx = 0;
@@ -189,7 +187,7 @@ int main(int argc, char *argv[])
     fprintf(file, "%s", metadata.str().c_str());
     fprintf(file, "a,r,psi,cycles,chir,chipsi,duration\n");
 
-    // Define function to initialize natural frequencies distribution
+    // Define function to initialize natural frequencies distribution w ~ g
     std::function<void(struct trial &)> g = NULL;
     g = [gmean, gstddev](struct trial &t) {
         initGaussianNaturalFreqs(t, gmean, gstddev);
@@ -217,7 +215,7 @@ int main(int argc, char *argv[])
         double trial_avg_cycles = 0;
         double trial_avg_t      = 0;
 #pragma omp parallel num_threads(maxthrds) default(none) \
-        shared(optN,optK,coupl,iters,burn,ic,seed,num_trials,log_interval,g,initStates,num_waves) \
+        shared(optN,optK,coupl,iters,burn,seed,num_trials,log_interval,g,initStates,num_waves) \
         reduction(+:trial_avg_r,trial_avg_psi,trial_avg_r2,trial_avg_psi2,trial_avg_cycles,trial_avg_t)
         {
 #pragma omp single
@@ -226,19 +224,19 @@ int main(int argc, char *argv[])
             }
 #pragma omp for 
             for (int i=0; i<num_trials; i++) {
-                struct trial trial;
-                struct trialData tdata;
+                struct trial t;
+                struct trialData tdat;
 
                 pcg32 RNG(seed, i);
 
-                initTrial(trial, optN, optK, coupl, RNG, initStates, g);
-                tdata = accumulateTrial(trial, iters, burn, log_interval, num_waves);
-                trial_avg_r      += tdata.r;
-                trial_avg_r2     += tdata.r*tdata.r;
-                trial_avg_psi    += tdata.psi;
-                trial_avg_psi2   += tdata.psi*tdata.psi;
-                trial_avg_cycles += tdata.cycles;
-                trial_avg_t      += tdata.duration;
+                initTrial(t, optN, optK, coupl, RNG, initStates, g);
+                tdat = accumulateTrial(t, iters, burn, log_interval, num_waves);
+                trial_avg_r      += tdat.r;
+                trial_avg_r2     += tdat.r*tdat.r;
+                trial_avg_psi    += tdat.psi;
+                trial_avg_psi2   += tdat.psi*tdat.psi;
+                trial_avg_cycles += tdat.cycl;
+                trial_avg_t      += tdat.duration;
             }
         }
         trial_avg_r      /= num_trials;
