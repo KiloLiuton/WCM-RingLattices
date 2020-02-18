@@ -7,9 +7,13 @@ import matplotlib.pyplot as plt
 from getMetadata import getMetadata
 from tqdm import tqdm
 
+def pltphase(f, figsize=(16,9), maxsize=200e6):
+    fsize = os.path.getsize(fname)
+    pass
+
 for arg in sys.argv[1:]:
     fname = arg
-    maxsize = 100e6
+    maxsize = 200e6
     if not arg.endswith('.dat'):
         if arg.startswith('--size='):
             maxsize = int(float(arg.split('=')[1])*1e6)
@@ -22,7 +26,8 @@ for arg in sys.argv[1:]:
     if fsize > maxsize:
         print(f'Large file detected {fsize/1e9:.2f} GB')
         if not any(['--size=' in x for x in sys.argv]):
-            tmp = input('Enter max filesize in MB: ')
+            tmp = input(f'Enter max filesize in MB [{int(maxsize/1e6)} MB]: ')
+            if tmp == '': tmp = fsize
             maxsize = min(int(float(tmp)*1e6), maxsize)
         d = round(fsize / maxsize)  #Plot 100 MB files at most
         data = []
@@ -59,8 +64,10 @@ for arg in sys.argv[1:]:
             )
 
     md = getMetadata(fname)
+    pad =  max([len(s) for s in md])
+    pad2 = max([len(s) for s in md.values()])
     for k in md:
-        print(k, md[k])
+        print(f'{k:{pad}} = {md[k]:{pad2}}')
     plt.xlabel('x')
     plt.ylabel('t')
     plt.title(fr'N={md["N"]}  K={md["K"]}  a={md["a"]}  ic={md["ic"]}  $g \sim N({md["gmean"]},{md["gstddev"]})$')
