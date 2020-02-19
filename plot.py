@@ -29,7 +29,7 @@ def plttrial(f, figsize=(16,16)):
     axs[1].legend(loc=0)
     axs[1].set_ylim(-0.1, 1.1)
 
-    axs[2].plot(data.t, data.cycles, label='cycles')
+    axs[2].plot(data.t, data.cycles/3, label='num_waves')
     axs[2].legend(loc=0)
 
 if __name__ == "__main__":
