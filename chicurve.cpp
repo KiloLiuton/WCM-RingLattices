@@ -229,7 +229,7 @@ int main(int argc, char *argv[])
 
                 pcg32 RNG(seed, i);
 
-                initTrial(t, optN, optK, coupl, RNG, initStates, g);
+                initTrial(t, optN, optK, coupl, RNG, g, initStates);
                 tdat = accumulateTrial(t, iters, burn, log_interval, num_waves);
                 trial_avg_r      += tdat.r;
                 trial_avg_r2     += tdat.r*tdat.r;

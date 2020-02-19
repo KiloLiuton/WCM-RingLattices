@@ -163,10 +163,10 @@ void initTrial(
     trial.t = 0;
     trial.dt = 0;
     trial.rng = RNG;
+    initNaturalFreqs(trial);
     initTable(trial);
     initStates(trial);
     initPops(trial);
-    initNaturalFreqs(trial);
     initDeltas(trial);
     initRates(trial);
 }

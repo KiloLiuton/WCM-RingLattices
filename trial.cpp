@@ -279,7 +279,7 @@ int main(int argc, char *argv[])
     } else {
         FILE *file = fopen(filename.c_str(), "w");
         fprintf(file, "%s", metadata.str().c_str());
-        fprintf(file, "r,psi,N0,N1,N2,t\n");
+        fprintf(file, "r,psi,cycles,N0,N1,N2,t\n");
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (int i=0; i<iters; i++) {
             interval++;
